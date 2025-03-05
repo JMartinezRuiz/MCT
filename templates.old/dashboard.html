@@ -1,0 +1,1167 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+  .chart-container {
+    position: relative;
+    height: 280px;
+    width: 100%;
+  }
+
+  /* Estilos para las notas */
+  .note-card {
+    margin-bottom: 15px;
+    transition: transform 0.2s;
+  }
+
+  .note-card:hover {
+    transform: translateY(-5px);
+  }
+
+  .note-yellow { border-left: 5px solid #ffc107; }
+  .note-blue { border-left: 5px solid #007bff; }
+  .note-green { border-left: 5px solid #28a745; }
+  .note-pink { border-left: 5px solid #e83e8c; }
+  .note-purple { border-left: 5px solid #6f42c1; }
+  .note-gray { border-left: 5px solid #6c757d; }
+
+  .note-content {
+    white-space: pre-wrap;
+    max-height: 100px;
+    overflow: hidden;
+  }
+
+  .note-timestamp {
+    font-size: 0.7rem;
+    color: #6c757d;
+  }
+
+  .notes-container {
+    height: 280px;
+    overflow-y: auto;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+  <div class="d-flex justify-content-between align-items-center">
+    <h1><i class="fas fa-tachometer-alt me-2"></i>Dashboard Principal</h1>
+    <div class="text-end">
+      <span class="badge bg-secondary">
+        <i class="far fa-calendar-alt me-1"></i> {{ current_date }}
+      </span>
+    </div>
+  </div>
+</div>
+
+<div class="row mb-4">
+  <!-- Project Status Summary - INFORMATIVO (sin enlaces) -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-folder me-2"></i>Project Status</h5>
+      </div>
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="flex-shrink-0">
+            <i class="fas fa-folder-open text-primary me-3" style="font-size: 1.5rem;"></i>
+          </div>
+          <div>
+            <h3 class="mb-0">{{ projects|length }}</h3>
+            <span class="text-muted">Total Projects</span>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-4 text-center">
+            <div class="card bg-secondary text-white mb-2 py-2">
+              <h4 class="mb-0">{{ projects|selectattr('status', 'equalto', 'Planning')|list|length }}</h4>
+              <small>Planning</small>
+            </div>
+          </div>
+          <div class="col-4 text-center">
+            <div class="card bg-primary text-white mb-2 py-2">
+              <h4 class="mb-0">{{ projects|selectattr('status', 'equalto', 'Open')|list|length }}</h4>
+              <small>Open</small>
+            </div>
+          </div>
+          <div class="col-4 text-center">
+            <div class="card bg-success text-white mb-2 py-2">
+              <h4 class="mb-0">{{ projects|selectattr('status', 'equalto', 'Closed')|list|length }}</h4>
+              <small>Closed</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-center mt-2">
+          <a href="{{ url_for('project.new_project') }}" class="btn btn-sm btn-outline-primary">
+            <i class="fas fa-plus-circle me-1"></i>New Project
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- My Tasks - CORREGIDO PARA MOSTRAR SOLO OPEN/IN PROGRESS/ON HOLD -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>My Tasks</h5>
+      </div>
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="flex-shrink-0">
+            <i class="fas fa-clipboard-list fa-2x text-primary me-3"></i>
+          </div>
+          <div>
+            {% set active_tasks = current_user_tasks|selectattr('status', 'in', ['Open', 'In progress', 'On hold'])|list|length %}
+            <h3 class="mb-0">{{ active_tasks }}</h3>
+            <span class="text-muted">Active Tasks</span>
+          </div>
+        </div>
+
+        <!-- Tabs para categorizar tareas -->
+        <ul class="nav nav-tabs" id="myTaskTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="open-tab" data-bs-toggle="tab" data-bs-target="#open-tasks" type="button" role="tab">
+              Open
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="in-progress-tab" data-bs-toggle="tab" data-bs-target="#in-progress-tasks" type="button" role="tab">
+              In Progress
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="on-hold-tab" data-bs-toggle="tab" data-bs-target="#on-hold-tasks" type="button" role="tab">
+              On Hold
+            </button>
+          </li>
+        </ul>
+
+        <div class="tab-content mt-2" id="myTaskTabContent">
+          <!-- Open Tasks Tab -->
+          <div class="tab-pane fade show active" id="open-tasks" role="tabpanel">
+            <div class="list-group list-group-flush small">
+              {% set open_tasks = current_user_tasks|selectattr('status', 'equalto', 'Open')|list %}
+              {% if open_tasks %}
+                {% for task in open_tasks %}
+                  {% if loop.index <= 3 %}
+                  <a href="{{ url_for('task_detail', project_id=task.checkpoint.milestone.project.id, milestone_id=task.checkpoint.milestone.id, checkpoint_id=task.checkpoint.id, task_id=task.id) }}" class="list-group-item list-group-item-action py-2">
+                    <div class="d-flex justify-content-between">
+                      <div>
+                        <strong>{{ task.code }}</strong>: {{ task.name|truncate(30) }}
+                      </div>
+                      <span class="badge status-open">
+                        {{ task.status }}
+                      </span>
+                    </div>
+                  </a>
+                  {% endif %}
+                {% endfor %}
+                {% if open_tasks|length > 3 %}
+                  <div class="text-center mt-2">
+                    <a href="{{ url_for('my_tasks') }}" class="btn btn-sm btn-outline-primary w-100">View All ({{ open_tasks|length }})</a>
+                  </div>
+                {% endif %}
+              {% else %}
+                <div class="text-center py-3">
+                  <p class="text-muted">No open tasks assigned to you</p>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- In Progress Tasks Tab -->
+          <div class="tab-pane fade" id="in-progress-tasks" role="tabpanel">
+            <div class="list-group list-group-flush small">
+              {% set in_progress_tasks = current_user_tasks|selectattr('status', 'equalto', 'In progress')|list %}
+              {% if in_progress_tasks %}
+                {% for task in in_progress_tasks %}
+                  {% if loop.index <= 3 %}
+                  <a href="{{ url_for('task_detail', project_id=task.checkpoint.milestone.project.id, milestone_id=task.checkpoint.milestone.id, checkpoint_id=task.checkpoint.id, task_id=task.id) }}" class="list-group-item list-group-item-action py-2">
+                    <div class="d-flex justify-content-between">
+                      <div>
+                        <strong>{{ task.code }}</strong>: {{ task.name|truncate(30) }}
+                      </div>
+                      <span class="badge status-in-progress">
+                        {{ task.status }}
+                      </span>
+                    </div>
+                  </a>
+                  {% endif %}
+                {% endfor %}
+                {% if in_progress_tasks|length > 3 %}
+                  <div class="text-center mt-2">
+                    <a href="{{ url_for('my_tasks') }}" class="btn btn-sm btn-outline-primary w-100">View All ({{ in_progress_tasks|length }})</a>
+                  </div>
+                {% endif %}
+              {% else %}
+                <div class="text-center py-3">
+                  <p class="text-muted">No tasks in progress</p>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- On Hold Tasks Tab -->
+          <div class="tab-pane fade" id="on-hold-tasks" role="tabpanel">
+            <div class="list-group list-group-flush small">
+              {% set on_hold_tasks = current_user_tasks|selectattr('status', 'equalto', 'On hold')|list %}
+              {% if on_hold_tasks %}
+                {% for task in on_hold_tasks %}
+                  {% if loop.index <= 3 %}
+                  <a href="{{ url_for('task_detail', project_id=task.checkpoint.milestone.project.id, milestone_id=task.checkpoint.milestone.id, checkpoint_id=task.checkpoint.id, task_id=task.id) }}" class="list-group-item list-group-item-action py-2">
+                    <div class="d-flex justify-content-between">
+                      <div>
+                        <strong>{{ task.code }}</strong>: {{ task.name|truncate(30) }}
+                      </div>
+                      <span class="badge status-on-hold">
+                        {{ task.status }}
+                      </span>
+                    </div>
+                  </a>
+                  {% endif %}
+                {% endfor %}
+                {% if on_hold_tasks|length > 3 %}
+                  <div class="text-center mt-2">
+                    <a href="{{ url_for('my_tasks') }}" class="btn btn-sm btn-outline-primary w-100">View All ({{ on_hold_tasks|length }})</a>
+                  </div>
+                {% endif %}
+              {% else %}
+                <div class="text-center py-3">
+                  <p class="text-muted">No tasks on hold</p>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activity and Problems -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header bg-light">
+        <ul class="nav nav-tabs card-header-tabs" id="activityTab" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="activity-tab" data-bs-toggle="tab" data-bs-target="#activity" type="button" role="tab">
+              <i class="fas fa-history me-1"></i>Recent Activity
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="problems-tab" data-bs-toggle="tab" data-bs-target="#problems" type="button" role="tab">
+              <i class="fas fa-exclamation-triangle me-1"></i>Problems
+              {% if total_open_problems > 0 %}
+                <span class="badge bg-danger">{{ total_open_problems }}</span>
+              {% endif %}
+            </button>
+          </li>
+        </ul>
+      </div>
+      <div class="card-body">
+        <div class="tab-content" id="activityTabContent">
+          <!-- Recent Activity Tab -->
+          <div class="tab-pane fade show active" id="activity" role="tabpanel">
+            <div class="position-relative">
+              <div id="activityCarousel" class="carousel slide" data-bs-ride="false">
+                <div class="carousel-inner">
+                  {% set recent_comments = [] %}
+                  {% for project in projects %}
+                    {% for log in project.logs %}
+                      {% if loop.index0 < 1 %}{% set _ = recent_comments.append((log, project)) %}{% endif %}
+                    {% endfor %}
+                  {% endfor %}
+
+                  {% if recent_comments %}
+                    {% for comment, project in recent_comments %}
+                      {% if loop.index <= 5 %}
+                      <div class="carousel-item {% if loop.index0 == 0 %}active{% endif %}">
+                        <div class="card mb-2 border-start-0 rounded-3" style="border-left: 4px solid #3c5aa8 !important;">
+                          <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                              <div>
+                                <span class="fas fa-user-circle me-2 text-primary"></span>
+                                <strong>{{ comment.user.username if comment.user else 'System' }}</strong>
+                              </div>
+                              <span class="text-muted small">{{ comment.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                            </div>
+                            <p class="card-text mb-1 small">{{ comment.comment_text|truncate(80) }}</p>
+                            <small class="text-muted">
+                              <i class="fas fa-folder me-1"></i><a href="{{ url_for('project_dashboard', project_id=project.id) }}">{{ project.name }}</a>
+                            </small>
+                          </div>
+                        </div>
+                      </div>
+                      {% endif %}
+                    {% endfor %}
+                  {% else %}
+                    <div class="carousel-item active">
+                      <div class="text-center py-4">
+                        <i class="fas fa-history fa-2x mb-2 text-muted"></i>
+                        <p class="text-muted">No recent activity</p>
+                      </div>
+                    </div>
+                  {% endif %}
+                </div>
+
+                {% if recent_comments|length > 1 %}
+                <div class="carousel-controls text-center mt-2">
+                  <button class="btn btn-sm btn-outline-secondary mx-1" type="button" data-bs-target="#activityCarousel" data-bs-slide="prev">
+                    <i class="fas fa-chevron-left"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-secondary mx-1" type="button" data-bs-target="#activityCarousel" data-bs-slide="next">
+                    <i class="fas fa-chevron-right"></i>
+                  </button>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Problems Tab -->
+          <div class="tab-pane fade" id="problems" role="tabpanel">
+            {% if recent_problems %}
+              <div class="list-group list-group-flush small">
+                {% for problem in recent_problems %}
+                  {% if loop.index <= 5 %}
+                  <a href="{{ url_for('problem_detail', problem_id=problem.id) }}" class="list-group-item list-group-item-action py-2">
+                    <div class="d-flex justify-content-between">
+                      <div>
+                        <strong>{{ problem.code }}</strong>: {{ problem.name|truncate(25) }}
+                      </div>
+                      <span class="badge {% if problem.priority in ['P1', 'P2'] %}bg-danger{% elif problem.priority == 'P3' %}bg-warning{% else %}bg-info{% endif %}">
+                        {{ problem.priority }}
+                      </span>
+                    </div>
+                    <small class="text-muted">
+                      <i class="fas fa-folder me-1"></i>{{ problem.project.name }}
+                      {% if problem.checkpoint %}
+                        <i class="fas fa-check-circle ms-1 me-1"></i>{{ problem.checkpoint.code }}
+                      {% elif problem.milestone %}
+                        <i class="fas fa-flag ms-1 me-1"></i>{{ problem.milestone.code }}
+                      {% endif %}
+                    </small>
+                  </a>
+                  {% endif %}
+                {% endfor %}
+              </div>
+              {% if recent_problems|length > 5 %}
+                <div class="text-center mt-2">
+                  <a href="{{ url_for('filter_problems', status='Open,In progress') }}" class="btn btn-sm btn-outline-danger">
+                    View All Problems
+                  </a>
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="text-center py-4">
+                <i class="fas fa-check-circle fa-2x mb-2 text-success"></i>
+                <p class="text-muted">No open problems</p>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Nuevas cajas de visualización - ACTUALIZADAS -->
+<div class="row mb-4">
+  <!-- Progreso del proyecto (Gráfico de barras horizontales) - ACTUALIZADO -->
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Project Progress</h5>
+      </div>
+      <div class="card-body">
+        <div class="chart-container" id="projectProgressContainer">
+          <canvas id="projectProgressChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Aplicación de Notas - NUEVA SECCIÓN -->
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header bg-light">
+        <ul class="nav nav-tabs card-header-tabs" id="notesTab" role="tablist">
+          <li class="nav-item">
+            <a class="nav-link active" id="personal-notes-tab" data-bs-toggle="tab" href="#personalNotes" role="tab">
+              <i class="fas fa-sticky-note me-1"></i>Personal Notes
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="team-notes-tab" data-bs-toggle="tab" href="#teamNotes" role="tab">
+              <i class="fas fa-users me-1"></i>Team Notes
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div class="card-body p-0">
+        <div class="tab-content" id="notesTabContent">
+          <!-- Personal Notes Tab -->
+          <div class="tab-pane fade show active p-3 notes-container" id="personalNotes" role="tabpanel">
+            <!-- Form to add a new personal note -->
+            <div class="mb-3">
+              <div class="input-group">
+                <input type="text" id="personalNoteTitle" class="form-control" placeholder="Note title...">
+                <button class="btn btn-primary" id="addPersonalNoteBtn" type="button" data-bs-toggle="modal" data-bs-target="#personalNoteModal">
+                  <i class="fas fa-plus"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Notes list (personal) - Will be populated by JS -->
+            <div id="personalNotesList">
+              {% if personal_notes %}
+                {% for note in personal_notes %}
+                  <div class="card note-card note-{{ note.color }}" data-note-id="{{ note.id }}">
+                    <div class="card-body p-2">
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <h6 class="card-title mb-0">{{ note.title }}</h6>
+                        <div>
+                          <button class="btn btn-sm btn-link text-primary edit-note" data-note-id="{{ note.id }}" data-note-type="personal">
+                            <i class="fas fa-edit"></i>
+                          </button>
+                          <button class="btn btn-sm btn-link text-danger delete-note" data-note-id="{{ note.id }}" data-note-type="personal">
+                            <i class="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <p class="card-text note-content">{{ note.content }}</p>
+                      <div class="note-timestamp">
+                        Updated: {{ note.updated_at.strftime('%Y-%m-%d %H:%M') }}
+                      </div>
+                    </div>
+                  </div>
+                {% else %}
+                  <div class="text-center text-muted">
+                    <i class="fas fa-sticky-note fa-2x mb-2"></i>
+                    <p>No personal notes yet. Add your first note!</p>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="text-center text-muted">
+                  <i class="fas fa-sticky-note fa-2x mb-2"></i>
+                  <p>No personal notes yet. Add your first note!</p>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Team Notes Tab -->
+          <div class="tab-pane fade p-3 notes-container" id="teamNotes" role="tabpanel">
+            <!-- Form to add a new team note -->
+            <div class="mb-3">
+              <div class="input-group">
+                <select id="teamNoteTeam" class="form-select">
+                  {% for team in user_teams %}
+                    <option value="{{ team.id }}">{{ team.name }}</option>
+                  {% endfor %}
+                </select>
+                <input type="text" id="teamNoteTitle" class="form-control" placeholder="Note title...">
+                <button class="btn btn-primary" id="addTeamNoteBtn" type="button" data-bs-toggle="modal" data-bs-target="#teamNoteModal">
+                  <i class="fas fa-plus"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Notes list (team) - Will be populated by JS -->
+            <div id="teamNotesList">
+              {% if team_notes %}
+                {% for note in team_notes %}
+                  <div class="card note-card note-{{ note.color }}" data-note-id="{{ note.id }}">
+                    <div class="card-body p-2">
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <h6 class="card-title mb-0">{{ note.title }}</h6>
+                        <span class="badge bg-info">{{ note.team.name }}</span>
+                      </div>
+                      <p class="card-text note-content">{{ note.content }}</p>
+                      <div class="d-flex justify-content-between">
+                        <div class="note-timestamp">
+                          By: {{ note.user.username }} | Updated: {{ note.updated_at.strftime('%Y-%m-%d %H:%M') }}
+                        </div>
+                        {% if note.user_id == current_user.id %}
+                        <div>
+                          <button class="btn btn-sm btn-link text-primary edit-note" data-note-id="{{ note.id }}" data-note-type="team">
+                            <i class="fas fa-edit"></i>
+                          </button>
+                          <button class="btn btn-sm btn-link text-danger delete-note" data-note-id="{{ note.id }}" data-note-type="team">
+                            <i class="fas fa-trash"></i>
+                          </button>
+                        </div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                {% else %}
+                  <div class="text-center text-muted">
+                    <i class="fas fa-users fa-2x mb-2"></i>
+                    <p>No team notes yet. Share your first note with your team!</p>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="text-center text-muted">
+                  <i class="fas fa-users fa-2x mb-2"></i>
+                  <p>No team notes yet. Share your first note with your team!</p>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para notas personales -->
+<div class="modal fade" id="personalNoteModal" tabindex="-1" aria-labelledby="personalNoteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="personalNoteModalLabel">Add Personal Note</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="personalNoteId">
+        <div class="mb-3">
+          <label for="personalNoteTitleModal" class="form-label">Title</label>
+          <input type="text" class="form-control" id="personalNoteTitleModal" required>
+        </div>
+        <div class="mb-3">
+          <label for="personalNoteContent" class="form-label">Content</label>
+          <textarea class="form-control" id="personalNoteContent" rows="4" required></textarea>
+        </div>
+        <div class="mb-3">
+          <label for="personalNoteColor" class="form-label">Color</label>
+          <select class="form-select" id="personalNoteColor">
+            <option value="yellow">Yellow</option>
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+            <option value="pink">Pink</option>
+            <option value="purple">Purple</option>
+            <option value="gray">Gray</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="savePersonalNote">Save Note</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para notas de equipo -->
+<div class="modal fade" id="teamNoteModal" tabindex="-1" aria-labelledby="teamNoteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="teamNoteModalLabel">Add Team Note</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="teamNoteId">
+        <div class="mb-3">
+          <label for="teamNoteTeamModal" class="form-label">Team</label>
+          <select class="form-select" id="teamNoteTeamModal">
+            {% for team in user_teams %}
+              <option value="{{ team.id }}">{{ team.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label for="teamNoteTitleModal" class="form-label">Title</label>
+          <input type="text" class="form-control" id="teamNoteTitleModal" required>
+        </div>
+        <div class="mb-3">
+          <label for="teamNoteContent" class="form-label">Content</label>
+          <textarea class="form-control" id="teamNoteContent" rows="4" required></textarea>
+        </div>
+        <div class="mb-3">
+          <label for="teamNoteColor" class="form-label">Color</label>
+          <select class="form-select" id="teamNoteColor">
+            <option value="blue">Blue</option>
+            <option value="yellow">Yellow</option>
+            <option value="green">Green</option>
+            <option value="pink">Pink</option>
+            <option value="purple">Purple</option>
+            <option value="gray">Gray</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveTeamNote">Save Note</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sección de proyectos colapsable -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center" id="projectsSectionHeader" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#projectsSection">
+        <span><i class="fas fa-folder me-2"></i>Proyectos</span>
+        <div>
+          <a href="{{ url_for('new_project') }}" class="btn btn-sm btn-success me-2">
+            <i class="fas fa-plus me-1"></i>Nuevo
+          </a>
+          <span class="collapse-icon">
+            <i class="fas fa-chevron-down"></i>
+          </span>
+        </div>
+      </div>
+      <div class="collapse show" id="projectsSection">
+        <div class="card-body">
+          <div class="row g-4">
+            {% for project in projects %}
+            <div class="col-md-4">
+              <div class="card h-100">
+                <div class="card-body">
+                  <h5 class="card-title">{{ project.code }} - {{ project.name }}</h5>
+                  <div class="d-flex align-items-center mb-3">
+                    <span class="badge bg-primary me-2">Proyecto</span>
+                    {% if project.category is defined %}
+                    <span class="badge bg-secondary me-2">{{ project.category }}</span>
+                    {% endif %}
+                    {% if project.importance is defined %}
+                    <span class="badge {% if project.importance in ['P1', 'P2'] %}bg-danger{% elif project.importance == 'P3' %}bg-warning{% else %}bg-info{% endif %} me-2">
+                      {{ project.importance }}
+                    </span>
+                    {% endif %}
+                    {% if project.size is defined %}
+                    <span class="badge bg-info me-2">
+                      {{ project.size }}
+                    </span>
+                    {% endif %}
+
+                    <span class="badge
+                      {% if project.status == 'Planning' %}bg-secondary
+                      {% elif project.status == 'Open' %}bg-primary
+                      {% elif project.status == 'Review' %}bg-warning
+                      {% elif project.status == 'Closed' %}bg-success{% endif %}">
+                      {{ project.status }}
+                    </span>
+                  </div>
+                  <p class="card-text text-muted">{{ project.description|truncate(100) }}</p>
+                  <div class="d-flex justify-content-between align-items-center mt-3">
+                    <span class="text-muted small">Creado: {{ project.created_at.strftime('%d/%m/%Y') }}</span>
+                    <a href="{{ url_for('project_dashboard', project_id=project.id) }}" class="btn btn-sm btn-outline-primary">
+                      <i class="fas fa-eye me-1"></i>Ver
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% else %}
+            <div class="col-12 text-center">
+              <p class="text-muted my-5">
+                <i class="fas fa-folder-open fa-3x mb-3"></i><br>
+                No hay proyectos creados
+              </p>
+              <a href="{{ url_for('new_project') }}" class="btn btn-primary">
+                <i class="fas fa-plus-circle me-2"></i>Crear Primer Proyecto
+              </a>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Chart.js para los gráficos -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Gráfico de progreso de proyectos (barras horizontales)
+    setupProjectProgressChart();
+
+    // Inicializar funcionalidad de notas
+    setupNotes();
+
+    // Control para colapsar/expandir la sección de proyectos
+    const projectsHeader = document.getElementById('projectsSectionHeader');
+    const projectsSection = document.getElementById('projectsSection');
+    const collapseIcon = document.querySelector('.collapse-icon i');
+
+    projectsHeader.addEventListener('click', function() {
+      if (projectsSection.classList.contains('show')) {
+        collapseIcon.classList.remove('fa-chevron-down');
+        collapseIcon.classList.add('fa-chevron-up');
+      } else {
+        collapseIcon.classList.remove('fa-chevron-up');
+        collapseIcon.classList.add('fa-chevron-down');
+      }
+    });
+  });
+
+  // Función para configurar el gráfico de progreso de proyectos
+  function setupProjectProgressChart() {
+    // Obtener datos de proyectos abiertos desde API
+    fetch('/api/projects/open-progress')
+      .then(response => response.json())
+      .then(data => {
+        if (data.length === 0) {
+          // Si no hay proyectos abiertos, mostrar mensaje
+          document.getElementById('projectProgressContainer').innerHTML = `
+            <div class="text-center py-5">
+              <i class="fas fa-chart-bar fa-3x mb-3 text-muted"></i>
+              <p class="text-muted">No hay proyectos abiertos para mostrar</p>
+            </div>
+          `;
+          return;
+        }
+
+        // Preparar datos para el gráfico
+        const labels = data.map(project => project.code + ': ' + project.name);
+        const values = data.map(project => project.progress);
+        const backgroundColors = values.map(value => {
+          if (value < 25) return 'rgba(220, 53, 69, 0.8)';  // Rojo (poco progreso)
+          if (value < 50) return 'rgba(255, 193, 7, 0.8)';  // Amarillo
+          if (value < 75) return 'rgba(0, 123, 255, 0.8)';  // Azul
+          return 'rgba(40, 167, 69, 0.8)';                  // Verde (mucho progreso)
+        });
+
+        // Crear gráfico
+        const ctx = document.getElementById('projectProgressChart').getContext('2d');
+        new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Project Completion (%)',
+              data: values,
+              backgroundColor: backgroundColors,
+              borderColor: backgroundColors.map(color => color.replace('0.8', '1')),
+              borderWidth: 1
+            }]
+          },
+          options: {
+            indexAxis: 'y',  // Horizontal bars
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                beginAtZero: true,
+                max: 100,
+                grid: {
+                  display: true
+                },
+                ticks: {
+                  callback: function(value) {
+                    return value + '%';
+                  }
+                }
+              },
+              y: {
+                grid: {
+                  display: false
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    return context.parsed.x + '% completed';
+                  }
+                }
+              }
+            }
+          }
+        });
+      })
+      .catch(error => {
+        console.error('Error fetching project progress data:', error);
+        document.getElementById('projectProgressContainer').innerHTML = `
+          <div class="text-center py-5">
+            <i class="fas fa-exclamation-triangle fa-3x mb-3 text-warning"></i>
+            <p class="text-muted">Error loading project progress data</p>
+          </div>
+        `;
+      });
+  }
+
+  // Funcionalidad de notas
+  function setupNotes() {
+    // Personal Notes Modal
+    const personalNoteModal = document.getElementById('personalNoteModal');
+    const personalNoteId = document.getElementById('personalNoteId');
+    const personalNoteTitleModal = document.getElementById('personalNoteTitleModal');
+    const personalNoteContent = document.getElementById('personalNoteContent');
+    const personalNoteColor = document.getElementById('personalNoteColor');
+    const savePersonalNoteBtn = document.getElementById('savePersonalNote');
+
+    // Team Notes Modal
+    const teamNoteModal = document.getElementById('teamNoteModal');
+    const teamNoteId = document.getElementById('teamNoteId');
+    const teamNoteTeamModal = document.getElementById('teamNoteTeamModal');
+    const teamNoteTitleModal = document.getElementById('teamNoteTitleModal');
+    const teamNoteContent = document.getElementById('teamNoteContent');
+    const teamNoteColor = document.getElementById('teamNoteColor');
+    const saveTeamNoteBtn = document.getElementById('saveTeamNote');
+
+    // Quick Add Buttons
+    const addPersonalNoteBtn = document.getElementById('addPersonalNoteBtn');
+    const addTeamNoteBtn = document.getElementById('addTeamNoteBtn');
+
+    // Handle adding a personal note
+    addPersonalNoteBtn.addEventListener('click', function() {
+      // Reset form
+      personalNoteId.value = '';
+      personalNoteTitleModal.value = document.getElementById('personalNoteTitle').value || '';
+      personalNoteContent.value = '';
+      personalNoteColor.value = 'yellow';
+      document.getElementById('personalNoteModalLabel').textContent = 'Add Personal Note';
+    });
+
+    // Handle adding a team note
+    addTeamNoteBtn.addEventListener('click', function() {
+      // Reset form
+      teamNoteId.value = '';
+      teamNoteTeamModal.value = document.getElementById('teamNoteTeam').value;
+      teamNoteTitleModal.value = document.getElementById('teamNoteTitle').value || '';
+      teamNoteContent.value = '';
+      teamNoteColor.value = 'blue';
+      document.getElementById('teamNoteModalLabel').textContent = 'Add Team Note';
+    });
+
+    // Save personal note
+    savePersonalNoteBtn.addEventListener('click', function() {
+      // Validate form
+      if (!personalNoteTitleModal.value || !personalNoteContent.value) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      // Prepare data
+      const noteData = {
+        title: personalNoteTitleModal.value,
+        content: personalNoteContent.value,
+        color: personalNoteColor.value
+      };
+
+      // Add or update note
+      const isEdit = personalNoteId.value !== '';
+      const url = isEdit ? `/api/notes/personal/${personalNoteId.value}` : '/api/notes/personal';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      fetch(url, {
+        method: method,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(noteData)
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Close modal
+          bootstrap.Modal.getInstance(personalNoteModal).hide();
+
+          // Reload notes or update UI
+          loadPersonalNotes();
+
+          // Clear input field
+          document.getElementById('personalNoteTitle').value = '';
+
+          // Show success message
+          showNotification(isEdit ? 'Note updated successfully' : 'Note added successfully', 'success');
+        } else {
+          showNotification(data.message || 'Error saving note', 'error');
+        }
+      })
+      .catch(error => {
+        console.error('Error saving personal note:', error);
+        showNotification('Error saving note', 'error');
+      });
+    });
+
+    // Save team note
+    saveTeamNoteBtn.addEventListener('click', function() {
+      // Validate form
+      if (!teamNoteTitleModal.value || !teamNoteContent.value) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      // Prepare data
+      const noteData = {
+        team_id: parseInt(teamNoteTeamModal.value),
+        title: teamNoteTitleModal.value,
+        content: teamNoteContent.value,
+        color: teamNoteColor.value
+      };
+
+      // Add or update note
+      const isEdit = teamNoteId.value !== '';
+      const url = isEdit ? `/api/notes/team/${teamNoteId.value}` : '/api/notes/team';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      fetch(url, {
+        method: method,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(noteData)
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Close modal
+          bootstrap.Modal.getInstance(teamNoteModal).hide();
+
+          // Reload notes or update UI
+          loadTeamNotes();
+
+          // Clear input field
+          document.getElementById('teamNoteTitle').value = '';
+
+          // Show success message
+          showNotification(isEdit ? 'Team note updated successfully' : 'Team note added successfully', 'success');
+        } else {
+          showNotification(data.message || 'Error saving team note', 'error');
+        }
+      })
+      .catch(error => {
+        console.error('Error saving team note:', error);
+        showNotification('Error saving team note', 'error');
+      });
+    });
+
+    // Handle edit/delete note buttons
+    document.addEventListener('click', function(e) {
+      // Edit note
+      if (e.target.closest('.edit-note')) {
+        const btn = e.target.closest('.edit-note');
+        const noteId = btn.dataset.noteId;
+        const noteType = btn.dataset.noteType;
+
+        if (noteType === 'personal') {
+          editPersonalNote(noteId);
+        } else if (noteType === 'team') {
+          editTeamNote(noteId);
+        }
+      }
+
+      // Delete note
+      if (e.target.closest('.delete-note')) {
+        const btn = e.target.closest('.delete-note');
+        const noteId = btn.dataset.noteId;
+        const noteType = btn.dataset.noteType;
+
+        if (confirm('Are you sure you want to delete this note?')) {
+          if (noteType === 'personal') {
+            deletePersonalNote(noteId);
+          } else if (noteType === 'team') {
+            deleteTeamNote(noteId);
+          }
+        }
+      }
+    });
+
+    // Load notes from API
+    function loadPersonalNotes() {
+      fetch('/api/notes/personal')
+        .then(response => response.json())
+        .then(notes => {
+          const container = document.getElementById('personalNotesList');
+
+          if (notes.length === 0) {
+            container.innerHTML = `
+              <div class="text-center text-muted">
+                <i class="fas fa-sticky-note fa-2x mb-2"></i>
+                <p>No personal notes yet. Add your first note!</p>
+              </div>
+            `;
+            return;
+          }
+
+          let html = '';
+          notes.forEach(note => {
+            html += `
+              <div class="card note-card note-${note.color}" data-note-id="${note.id}">
+                <div class="card-body p-2">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <h6 class="card-title mb-0">${note.title}</h6>
+                    <div>
+                      <button class="btn btn-sm btn-link text-primary edit-note" data-note-id="${note.id}" data-note-type="personal">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                      <button class="btn btn-sm btn-link text-danger delete-note" data-note-id="${note.id}" data-note-type="personal">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <p class="card-text note-content">${note.content}</p>
+                  <div class="note-timestamp">
+                    Updated: ${note.updated_at}
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+
+          container.innerHTML = html;
+        })
+        .catch(error => {
+          console.error('Error loading personal notes:', error);
+          showNotification('Error loading personal notes', 'error');
+        });
+    }
+
+    function loadTeamNotes() {
+      fetch('/api/notes/team')
+        .then(response => response.json())
+        .then(notes => {
+          const container = document.getElementById('teamNotesList');
+
+          if (notes.length === 0) {
+            container.innerHTML = `
+              <div class="text-center text-muted">
+                <i class="fas fa-users fa-2x mb-2"></i>
+                <p>No team notes yet. Share your first note with your team!</p>
+              </div>
+            `;
+            return;
+          }
+
+          let html = '';
+          notes.forEach(note => {
+            // Opciones de edición solo para el creador de la nota
+            const editOptions = note.user_id === parseInt("{{ current_user.id }}") ? `
+              <div>
+                <button class="btn btn-sm btn-link text-primary edit-note" data-note-id="${note.id}" data-note-type="team">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-link text-danger delete-note" data-note-id="${note.id}" data-note-type="team">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            ` : '';
+
+            html += `
+              <div class="card note-card note-${note.color}" data-note-id="${note.id}">
+                <div class="card-body p-2">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <h6 class="card-title mb-0">${note.title}</h6>
+                    <span class="badge bg-info">${note.team_name}</span>
+                  </div>
+                  <p class="card-text note-content">${note.content}</p>
+                  <div class="d-flex justify-content-between">
+                    <div class="note-timestamp">
+                      By: ${note.user_name} | Updated: ${note.updated_at}
+                    </div>
+                    ${editOptions}
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+
+          container.innerHTML = html;
+        })
+        .catch(error => {
+          console.error('Error loading team notes:', error);
+          showNotification('Error loading team notes', 'error');
+        });
+    }
+
+    // Edit notes
+    function editPersonalNote(noteId) {
+      fetch(`/api/notes/personal/${noteId}`)
+        .then(response => response.json())
+        .then(note => {
+          personalNoteId.value = note.id;
+          personalNoteTitleModal.value = note.title;
+          personalNoteContent.value = note.content;
+          personalNoteColor.value = note.color;
+          document.getElementById('personalNoteModalLabel').textContent = 'Edit Personal Note';
+
+          // Show modal
+          new bootstrap.Modal(personalNoteModal).show();
+        })
+        .catch(error => {
+          console.error('Error loading note for edit:', error);
+          showNotification('Error loading note', 'error');
+        });
+    }
+
+    function editTeamNote(noteId) {
+      fetch(`/api/notes/team/${noteId}`)
+        .then(response => response.json())
+        .then(note => {
+          teamNoteId.value = note.id;
+          teamNoteTeamModal.value = note.team_id;
+          teamNoteTitleModal.value = note.title;
+          teamNoteContent.value = note.content;
+          teamNoteColor.value = note.color;
+          document.getElementById('teamNoteModalLabel').textContent = 'Edit Team Note';
+
+          // Show modal
+          new bootstrap.Modal(teamNoteModal).show();
+        })
+        .catch(error => {
+          console.error('Error loading team note for edit:', error);
+          showNotification('Error loading note', 'error');
+        });
+    }
+
+    // Delete notes
+    function deletePersonalNote(noteId) {
+      fetch(`/api/notes/personal/${noteId}`, {
+        method: 'DELETE'
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Reload notes or update UI
+          loadPersonalNotes();
+          showNotification('Note deleted successfully', 'success');
+        } else {
+          showNotification(data.message || 'Error deleting note', 'error');
+        }
+      })
+      .catch(error => {
+        console.error('Error deleting personal note:', error);
+        showNotification('Error deleting note', 'error');
+      });
+    }
+
+    function deleteTeamNote(noteId) {
+      fetch(`/api/notes/team/${noteId}`, {
+        method: 'DELETE'
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Reload notes or update UI
+          loadTeamNotes();
+          showNotification('Team note deleted successfully', 'success');
+        } else {
+          showNotification(data.message || 'Error deleting team note', 'error');
+        }
+      })
+      .catch(error => {
+        console.error('Error deleting team note:', error);
+        showNotification('Error deleting note', 'error');
+      });
+    }
+  }
+</script>
+{% endblock %}

@@ -16,7 +16,15 @@ from app.models.task import Task
 from app.models.problem import Problem
 from app.models.note import PersonalNote, TeamNote
 from app.utils.project import get_user_teams
+from flask import current_app
+import os
 
+
+@bp.route('/debug-path')
+def debug_path():
+    template_path = current_app.template_folder
+    exists = os.path.exists(os.path.join(template_path, 'dashboard.html'))
+    return f"Looking for templates in: {template_path}<br>dashboard.html exists: {exists}"
 
 @bp.route('/')
 @login_required

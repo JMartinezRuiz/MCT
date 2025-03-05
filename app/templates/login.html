@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="card shadow-lg border-0 rounded-lg mt-5">
+      <div class="card-header bg-primary text-white text-center">
+        <h3 class="my-4"><i class="fas fa-sign-in-alt me-2"></i>Acceso al Sistema</h3>
+      </div>
+      <div class="card-body p-4">
+        <form method="post">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            <label class="form-label">{{ form.username.label }}</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="fas fa-user"></i></span>
+              {{ form.username(class="form-control", placeholder="Nombre de usuario") }}
+            </div>
+          </div>
+          <div class="mb-4">
+            <label class="form-label">{{ form.password.label }}</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="fas fa-lock"></i></span>
+              {{ form.password(class="form-control", placeholder="Contraseña") }}
+            </div>
+            <div class="form-text text-end">
+              <small><a href="#" class="text-decoration-none">¿Olvidó su contraseña?</a></small>
+            </div>
+          </div>
+          <div class="d-grid">
+            <button type="submit" class="btn btn-primary btn-lg">
+              <i class="fas fa-sign-in-alt me-2"></i>{{ form.submit.label.text }}
+            </button>
+          </div>
+        </form>
+      </div>
+      <div class="card-footer text-center py-3 bg-light">
+        <div class="small">
+          <p class="mb-0">MCT Dashboard | Versión 1.0</p>
+          <p class="mb-0 text-muted">Credenciales por defecto: admin / admin</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

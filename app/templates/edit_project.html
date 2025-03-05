@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Editar Proyecto' if project else 'Nuevo Proyecto' }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <h2 class="mb-0">
+      {% if project %}
+        <i class="fas fa-edit me-2"></i>Editar Proyecto
+      {% else %}
+        <i class="fas fa-plus-circle me-2"></i>Nuevo Proyecto
+      {% endif %}
+    </h2>
+  </div>
+  <div class="card-body">
+    <form method="post">
+      {{ form.hidden_tag() }}
+
+      <div class="row mb-3">
+        <div class="col-md-12">
+          {{ form.name.label(class="form-label") }}
+          {{ form.name(class="form-control", placeholder="Nombre del proyecto") }}
+          {% if form.name.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.name.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="row mb-3">
+        <div class="col-md-12">
+          {{ form.description.label(class="form-label") }}
+          {{ form.description(class="form-control", rows=6, placeholder="Descripción detallada del proyecto") }}
+          {% if form.description.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.description.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="row mb-3">
+        <div class="col-md-6">
+          {{ form.category.label(class="form-label") }}
+          {{ form.category(class="form-select") }}
+          {% if form.category.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.category.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <div class="col-md-6">
+          {{ form.subcategory.label(class="form-label") }}
+          {{ form.subcategory(class="form-control", placeholder="Subcategoría del proyecto") }}
+          {% if form.subcategory.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.subcategory.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="row mb-3">
+        <div class="col-md-4">
+          {{ form.size.label(class="form-label") }}
+          {{ form.size(class="form-select") }}
+          {% if form.size.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.size.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <div class="col-md-4">
+          {{ form.importance.label(class="form-label") }}
+          {{ form.importance(class="form-select") }}
+          {% if form.importance.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.importance.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <div class="col-md-4">
+          {{ form.status.label(class="form-label") }}
+          {{ form.status(class="form-select") }}
+          {% if form.status.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.status.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="row mb-3">
+        <div class="col-md-12">
+          {{ form.budget.label(class="form-label") }}
+          {{ form.budget(class="form-control", placeholder="0.00") }}
+          {% if form.budget.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.budget.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-between">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+          <i class="fas fa-times me-2"></i>Cancelar
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save me-2"></i>{{ form.submit.label.text }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

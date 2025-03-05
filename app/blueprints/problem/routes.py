@@ -1,409 +1,208 @@
 """
-Routes for personal and team notes management.
+Routes for problem management functionality.
 """
 from datetime import datetime
-from flask import render_template, redirect, url_for, flash, request, jsonify, abort
+from flask import render_template, redirect, url_for, flash, request, abort, jsonify
 from flask_login import login_required, current_user
 
 from app.extensions import db
-from app.blueprints.note import bp
+from app.blueprints.problem import bp
+from app.models.problem import Problem, ProblemComment
 from app.models.user import User
-from app.models.team import Team
-from app.models.note import PersonalNote, TeamNote
-from app.forms.note import PersonalNoteForm, TeamNoteForm, TeamForm
-from app.utils.project import get_user_teams
+from app.forms.problem import ProblemForm, ProblemCommentForm
+from app.utils.project import update_project_cost, get_problem_count
 
 
-# Personal Notes Routes
-@bp.route('/notes/personal', methods=['GET'])
+@bp.route('/problem/<int:problem_id>')
 @login_required
-def personal_notes():
-    """View personal notes"""
-    notes = PersonalNote.query.filter_by(user_id=current_user.id).order_by(PersonalNote.updated_at.desc()).all()
-    form = PersonalNoteForm()
-    return render_template('personal_notes.html', notes=notes, form=form)
+def problem_detail(problem_id):
+    """View problem details"""
+    problem = Problem.query.get_or_404(problem_id)
+
+    # Get parent context for "back" button
+    parent_type = None
+    parent_id = None
+
+    if problem.checkpoint_id:
+        parent_type = 'checkpoint'
+        parent_id = problem.checkpoint_id
+    elif problem.milestone_id:
+        parent_type = 'milestone'
+        parent_id = problem.milestone_id
+    else:
+        parent_type = 'project'
+        parent_id = problem.project_id
+
+    # For age calculation
+    from datetime import datetime
+    now = datetime.utcnow()
+    age_days = (now - problem.opened_at).days
+
+    users = User.query.all()
+    return render_template(
+        'problem_detail.html',
+        problem=problem,
+        users=users,
+        parent_type=parent_type,
+        parent_id=parent_id,
+        project_id=problem.project_id,
+        milestone_id=problem.milestone_id if problem.milestone else None,
+        now=now,
+        age_days=age_days
+    )
 
 
-@bp.route('/notes/personal/add', methods=['POST'])
+@bp.route('/problem/<int:problem_id>', methods=['POST'])
 @login_required
-def add_personal_note():
-    """Add a new personal note"""
-    form = PersonalNoteForm()
-    if form.validate_on_submit():
-        note = PersonalNote(
-            user_id=current_user.id,
-            title=form.title.data,
-            content=form.content.data,
-            color=form.color.data
+def update_problem(problem_id):
+    """Update problem details"""
+    problem = Problem.query.get_or_404(problem_id)
+
+    previous_status = problem.status
+    old_cost = problem.cost
+
+    # Update fields from form
+    problem.name = request.form.get('name')
+    problem.description = request.form.get('description')
+    problem.category = request.form.get('category')
+    problem.priority = request.form.get('priority')
+    problem.cost = float(request.form.get('cost', 0))
+
+    assigned_to = request.form.get('assigned_to')
+    if assigned_to:
+        problem.assigned_to_id = int(assigned_to)
+
+    # Handle status changes
+    new_status = request.form.get('status')
+    if previous_status != new_status:
+        # Add system comment for status change
+        sys_comment = ProblemComment(
+            problem=problem,
+            comment_text=f"Status changed from {previous_status} to {new_status}",
+            is_system=True
         )
-        db.session.add(note)
-        db.session.commit()
-        flash('Note added successfully', 'success')
-    return redirect(url_for('note.personal_notes'))
+        db.session.add(sys_comment)
 
+        # Update resolution date if needed
+        if new_status in ['Resolved', 'Closed'] and previous_status not in ['Resolved', 'Closed']:
+            problem.resolved_at = datetime.utcnow()
+        elif new_status not in ['Resolved', 'Closed'] and previous_status in ['Resolved', 'Closed']:
+            problem.resolved_at = None
 
-@bp.route('/notes/personal/<int:note_id>/edit', methods=['POST'])
-@login_required
-def update_personal_note(note_id):
-    """Update an existing personal note"""
-    note = PersonalNote.query.get_or_404(note_id)
-    if note.user_id != current_user.id:
-        abort(403)
-
-    form = PersonalNoteForm()
-    if form.validate_on_submit():
-        note.title = form.title.data
-        note.content = form.content.data
-        note.color = form.color.data
-        note.updated_at = datetime.utcnow()
-        db.session.commit()
-        flash('Note updated successfully', 'success')
-    return redirect(url_for('note.personal_notes'))
-
-
-@bp.route('/notes/personal/<int:note_id>/delete', methods=['POST'])
-@login_required
-def delete_personal_note(note_id):
-    """Delete a personal note"""
-    note = PersonalNote.query.get_or_404(note_id)
-    if note.user_id != current_user.id:
-        abort(403)
-
-    db.session.delete(note)
+    problem.status = new_status
     db.session.commit()
-    flash('Note deleted successfully', 'success')
-    return redirect(url_for('note.personal_notes'))
+
+    # Update project cost if the cost has changed
+    if old_cost != problem.cost:
+        update_project_cost(problem.project_id)
+
+    flash('Problem updated', 'success')
+    return redirect(url_for('problem.problem_detail', problem_id=problem.id))
 
 
-# Team Notes Routes
-@bp.route('/notes/team', methods=['GET'])
+@bp.route('/problem/<int:problem_id>/add_comment', methods=['POST'])
 @login_required
-def team_notes():
-    """View team notes"""
-    user_teams = get_user_teams()
-    team_ids = [team.id for team in user_teams]
-    notes = TeamNote.query.filter(TeamNote.team_id.in_(team_ids)).order_by(TeamNote.updated_at.desc()).all()
+def add_problem_comment(problem_id):
+    """Add a comment to a problem"""
+    problem = Problem.query.get_or_404(problem_id)
+    comment_text = request.form.get('comment_text')
 
-    form = TeamNoteForm()
-    form.team_id.choices = [(team.id, team.name) for team in user_teams]
+    if comment_text:
+        comment = ProblemComment(
+            problem=problem,
+            comment_text=comment_text,
+            user_id=current_user.id,
+            is_system=False
+        )
+        db.session.add(comment)
+        db.session.commit()
+        flash('Comment added', 'success')
 
-    return render_template('team_notes.html', notes=notes, form=form, teams=user_teams)
+    return redirect(url_for('problem.problem_detail', problem_id=problem.id))
 
 
-@bp.route('/notes/team/add', methods=['POST'])
+@bp.route('/problems/filter')
 @login_required
-def add_team_note():
-    """Add a new team note"""
-    user_teams = get_user_teams()
-    form = TeamNoteForm()
-    form.team_id.choices = [(team.id, team.name) for team in user_teams]
+def filter_problems():
+    """
+    Filter problems based on various criteria.
+    Parameters can include:
+    - project_id: Filter by project
+    - milestone_id: Filter by milestone
+    - checkpoint_id: Filter by checkpoint
+    - status: Filter by status
+    - priority: Filter by priority
+    - age: Filter by age in days
+    """
+    # Get filter parameters
+    project_id = request.args.get('project_id', None, type=int)
+    milestone_id = request.args.get('milestone_id', None, type=int)
+    checkpoint_id = request.args.get('checkpoint_id', None, type=int)
+    status = request.args.get('status', None)
+    priority = request.args.get('priority', None)
+    age = request.args.get('age', None, type=int)
 
-    if form.validate_on_submit():
-        # Verify the team belongs to the user
-        if any(team.id == form.team_id.data for team in user_teams):
-            note = TeamNote(
-                team_id=form.team_id.data,
-                user_id=current_user.id,
-                title=form.title.data,
-                content=form.content.data,
-                color=form.color.data
-            )
-            db.session.add(note)
-            db.session.commit()
-            flash('Team note added successfully', 'success')
+    # Build query based on filters
+    query = Problem.query
+
+    if project_id:
+        query = query.filter_by(project_id=project_id)
+
+    if milestone_id:
+        query = query.filter_by(milestone_id=milestone_id)
+
+    if checkpoint_id:
+        query = query.filter_by(checkpoint_id=checkpoint_id)
+
+    if status:
+        if ',' in status:
+            statuses = status.split(',')
+            query = query.filter(Problem.status.in_(statuses))
         else:
-            flash('You are not a member of this team', 'danger')
-    return redirect(url_for('note.team_notes'))
+            query = query.filter_by(status=status)
 
-
-@bp.route('/notes/team/<int:note_id>/edit', methods=['POST'])
-@login_required
-def update_team_note(note_id):
-    """Update an existing team note"""
-    note = TeamNote.query.get_or_404(note_id)
-
-    # Only the creator or a team member can edit
-    user_teams = get_user_teams()
-    team_ids = [team.id for team in user_teams]
-
-    if note.user_id != current_user.id and note.team_id not in team_ids:
-        abort(403)
-
-    form = TeamNoteForm()
-    form.team_id.choices = [(team.id, team.name) for team in user_teams]
-
-    if form.validate_on_submit():
-        # Only the owner can change the team
-        if note.user_id == current_user.id:
-            if any(team.id == form.team_id.data for team in user_teams):
-                note.team_id = form.team_id.data
-            else:
-                flash('You are not a member of this team', 'danger')
-                return redirect(url_for('note.team_notes'))
-
-        note.title = form.title.data
-        note.content = form.content.data
-        note.color = form.color.data
-        note.updated_at = datetime.utcnow()
-        db.session.commit()
-        flash('Team note updated successfully', 'success')
-    return redirect(url_for('note.team_notes'))
-
-
-@bp.route('/notes/team/<int:note_id>/delete', methods=['POST'])
-@login_required
-def delete_team_note(note_id):
-    """Delete a team note"""
-    note = TeamNote.query.get_or_404(note_id)
-
-    # Only the creator can delete
-    if note.user_id != current_user.id:
-        abort(403)
-
-    db.session.delete(note)
-    db.session.commit()
-    flash('Team note deleted successfully', 'success')
-    return redirect(url_for('note.team_notes'))
-
-
-# API Routes for Notes
-@bp.route('/api/notes/personal', methods=['GET'])
-@login_required
-def api_get_personal_notes():
-    """API endpoint to get personal notes"""
-    notes = PersonalNote.query.filter_by(user_id=current_user.id).order_by(PersonalNote.updated_at.desc()).all()
-
-    notes_data = [{
-        'id': note.id,
-        'title': note.title,
-        'content': note.content,
-        'color': note.color,
-        'created_at': note.created_at.strftime('%Y-%m-%d %H:%M'),
-        'updated_at': note.updated_at.strftime('%Y-%m-%d %H:%M')
-    } for note in notes]
-
-    return jsonify(notes_data)
-
-
-@bp.route('/api/notes/personal', methods=['POST'])
-@login_required
-def api_add_personal_note():
-    """API endpoint to add a personal note"""
-    data = request.json
-
-    if not data or 'title' not in data or 'content' not in data:
-        return jsonify({'success': False, 'message': 'Missing required fields'}), 400
-
-    note = PersonalNote(
-        user_id=current_user.id,
-        title=data['title'],
-        content=data['content'],
-        color=data.get('color', 'yellow')
-    )
-
-    db.session.add(note)
-    db.session.commit()
-
-    return jsonify({
-        'success': True,
-        'note': {
-            'id': note.id,
-            'title': note.title,
-            'content': note.content,
-            'color': note.color,
-            'created_at': note.created_at.strftime('%Y-%m-%d %H:%M'),
-            'updated_at': note.updated_at.strftime('%Y-%m-%d %H:%M')
-        }
-    })
-
-
-@bp.route('/api/notes/personal/<int:note_id>', methods=['PUT'])
-@login_required
-def api_update_personal_note(note_id):
-    """API endpoint to update a personal note"""
-    note = PersonalNote.query.get_or_404(note_id)
-
-    if note.user_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Not authorized'}), 403
-
-    data = request.json
-
-    if not data:
-        return jsonify({'success': False, 'message': 'No data provided'}), 400
-
-    if 'title' in data:
-        note.title = data['title']
-
-    if 'content' in data:
-        note.content = data['content']
-
-    if 'color' in data:
-        note.color = data['color']
-
-    note.updated_at = datetime.utcnow()
-    db.session.commit()
-
-    return jsonify({
-        'success': True,
-        'note': {
-            'id': note.id,
-            'title': note.title,
-            'content': note.content,
-            'color': note.color,
-            'created_at': note.created_at.strftime('%Y-%m-%d %H:%M'),
-            'updated_at': note.updated_at.strftime('%Y-%m-%d %H:%M')
-        }
-    })
-
-
-@bp.route('/api/notes/personal/<int:note_id>', methods=['DELETE'])
-@login_required
-def api_delete_personal_note(note_id):
-    """API endpoint to delete a personal note"""
-    note = PersonalNote.query.get_or_404(note_id)
-
-    if note.user_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Not authorized'}), 403
-
-    db.session.delete(note)
-    db.session.commit()
-
-    return jsonify({'success': True})
-
-
-@bp.route('/api/notes/team', methods=['GET'])
-@login_required
-def api_get_team_notes():
-    """API endpoint to get team notes"""
-    user_teams = get_user_teams()
-    team_ids = [team.id for team in user_teams]
-
-    notes = TeamNote.query.filter(TeamNote.team_id.in_(team_ids)).order_by(TeamNote.updated_at.desc()).all()
-
-    notes_data = [{
-        'id': note.id,
-        'team_id': note.team_id,
-        'team_name': Team.query.get(note.team_id).name,
-        'user_id': note.user_id,
-        'user_name': User.query.get(note.user_id).username,
-        'title': note.title,
-        'content': note.content,
-        'color': note.color,
-        'created_at': note.created_at.strftime('%Y-%m-%d %H:%M'),
-        'updated_at': note.updated_at.strftime('%Y-%m-%d %H:%M')
-    } for note in notes]
-
-    return jsonify(notes_data)
-
-
-@bp.route('/api/notes/team', methods=['POST'])
-@login_required
-def api_add_team_note():
-    """API endpoint to add a team note"""
-    data = request.json
-
-    if not data or 'title' not in data or 'content' not in data or 'team_id' not in data:
-        return jsonify({'success': False, 'message': 'Missing required fields'}), 400
-
-    # Verify the team belongs to the user
-    user_teams = get_user_teams()
-    team_ids = [team.id for team in user_teams]
-
-    if data['team_id'] not in team_ids:
-        return jsonify({'success': False, 'message': 'Not a member of this team'}), 403
-
-    note = TeamNote(
-        team_id=data['team_id'],
-        user_id=current_user.id,
-        title=data['title'],
-        content=data['content'],
-        color=data.get('color', 'blue')
-    )
-
-    db.session.add(note)
-    db.session.commit()
-
-    return jsonify({
-        'success': True,
-        'note': {
-            'id': note.id,
-            'team_id': note.team_id,
-            'team_name': Team.query.get(note.team_id).name,
-            'user_id': note.user_id,
-            'user_name': current_user.username,
-            'title': note.title,
-            'content': note.content,
-            'color': note.color,
-            'created_at': note.created_at.strftime('%Y-%m-%d %H:%M'),
-            'updated_at': note.updated_at.strftime('%Y-%m-%d %H:%M')
-        }
-    })
-
-
-@bp.route('/api/notes/team/<int:note_id>', methods=['PUT'])
-@login_required
-def api_update_team_note(note_id):
-    """API endpoint to update a team note"""
-    note = TeamNote.query.get_or_404(note_id)
-
-    # Only the creator or a team member can edit
-    user_teams = get_user_teams()
-    team_ids = [team.id for team in user_teams]
-
-    if note.user_id != current_user.id and note.team_id not in team_ids:
-        return jsonify({'success': False, 'message': 'Not authorized'}), 403
-
-    data = request.json
-
-    if not data:
-        return jsonify({'success': False, 'message': 'No data provided'}), 400
-
-    # Only the owner can change the team
-    if 'team_id' in data and note.user_id == current_user.id:
-        if data['team_id'] in team_ids:
-            note.team_id = data['team_id']
+    if priority:
+        if ',' in priority:
+            priorities = priority.split(',')
+            query = query.filter(Problem.priority.in_(priorities))
         else:
-            return jsonify({'success': False, 'message': 'Not a member of this team'}), 403
+            query = query.filter_by(priority=priority)
 
-    if 'title' in data:
-        note.title = data['title']
+    # Age filter requires extra calculation
+    if age:
+        from datetime import datetime, timedelta
+        cutoff_date = datetime.utcnow() - timedelta(days=age)
+        query = query.filter(Problem.opened_at >= cutoff_date)
 
-    if 'content' in data:
-        note.content = data['content']
+    # Execute query
+    problems = query.order_by(Problem.opened_at.desc()).all()
 
-    if 'color' in data:
-        note.color = data['color']
+    # Get context for template
+    from app.models.project import Project
+    from app.models.milestone import Milestone
+    from app.models.checkpoint import Checkpoint
 
-    note.updated_at = datetime.utcnow()
-    db.session.commit()
+    project = None
+    milestone = None
+    checkpoint = None
 
-    return jsonify({
-        'success': True,
-        'note': {
-            'id': note.id,
-            'team_id': note.team_id,
-            'team_name': Team.query.get(note.team_id).name,
-            'user_id': note.user_id,
-            'user_name': User.query.get(note.user_id).username,
-            'title': note.title,
-            'content': note.content,
-            'color': note.color,
-            'created_at': note.created_at.strftime('%Y-%m-%d %H:%M'),
-            'updated_at': note.updated_at.strftime('%Y-%m-%d %H:%M')
-        }
-    })
+    if project_id:
+        project = Project.query.get(project_id)
 
+    if milestone_id:
+        milestone = Milestone.query.get(milestone_id)
 
-@bp.route('/api/notes/team/<int:note_id>', methods=['DELETE'])
-@login_required
-def api_delete_team_note(note_id):
-    """API endpoint to delete a team note"""
-    note = TeamNote.query.get_or_404(note_id)
+    if checkpoint_id:
+        checkpoint = Checkpoint.query.get(checkpoint_id)
 
-    if note.user_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Not authorized'}), 403
+    # For age calculation
+    now = datetime.utcnow()
 
-    db.session.delete(note)
-    db.session.commit()
-
-    return jsonify({'success': True})
+    return render_template(
+        'problems.html',
+        problems=problems,
+        project=project,
+        milestone=milestone,
+        checkpoint=checkpoint,
+        now=now
+    )
