@@ -1,0 +1,460 @@
+{% extends 'base.html' %}
+{% block title %}{{ problem.code }} - Problem Detail{% endblock %}
+{% block content %}
+
+<div class="dashboard-header">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2>
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        {{ problem.code }} - {{ problem.name }}
+      </h2>
+      <div class="d-flex align-items-center">
+        <span class="badge
+          {% if problem.status == 'Open' %}bg-danger
+          {% elif problem.status == 'In progress' %}bg-warning
+          {% elif problem.status == 'Resolved' %}bg-info
+          {% else %}bg-success{% endif %} px-3 py-2 me-2">
+          {{ problem.status }}
+        </span>
+
+        <span class="badge
+          {% if problem.priority in ['P1', 'P2'] %}bg-danger
+          {% elif problem.priority == 'P3' %}bg-warning
+          {% else %}bg-info{% endif %} px-3 py-2">
+          {{ problem.priority }}
+        </span>
+      </div>
+    </div>
+    <div>
+      <button id="editButton" type="button" class="btn btn-primary" onclick="enableEditMode()">
+        <i class="fas fa-edit me-2"></i>Edit
+      </button>
+      <button id="updateButton" type="submit" form="problemForm" class="btn btn-success" style="display:none;">
+        <i class="fas fa-save me-2"></i>Save
+      </button>
+
+      {% if parent_type == 'checkpoint' %}
+      <a href="{{ url_for('checkpoint_dashboard', project_id=project_id, milestone_id=milestone_id, checkpoint_id=parent_id) }}" class="btn btn-outline-secondary ms-2">
+        <i class="fas fa-arrow-left me-2"></i>Back to Checkpoint
+      </a>
+      {% elif parent_type == 'milestone' %}
+      <a href="{{ url_for('milestone_dashboard', project_id=project_id, milestone_id=parent_id) }}" class="btn btn-outline-secondary ms-2">
+        <i class="fas fa-arrow-left me-2"></i>Back to Milestone
+      </a>
+      {% else %}
+      <a href="{{ url_for('project_dashboard', project_id=project_id) }}" class="btn btn-outline-secondary ms-2">
+        <i class="fas fa-arrow-left me-2"></i>Back to Project
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row mb-4">
+  <div class="col-md-8">
+    <!-- Problem Form -->
+    <div class="card">
+      <div class="card-header bg-light">
+        <div class="d-flex justify-content-between align-items-center">
+          <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Problem Information</h5>
+          <div id="problemAge" class="badge bg-light text-dark">
+            <i class="fas fa-clock me-1"></i>
+            {% set age_days = ((now - problem.opened_at).days)|int %}
+            {% if age_days == 0 %}
+              Opened today
+            {% elif age_days == 1 %}
+              Opened yesterday
+            {% else %}
+              Open for {{ age_days }} days
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <form id="problemForm" method="POST" action="{{ url_for('problem_detail', problem_id=problem.id) }}">
+          <div class="row">
+            <!-- Problem Title and Description -->
+            <div class="col-md-12 mb-4">
+              <div class="form-floating mb-3">
+                <input type="text" class="form-control locked-field" name="name" id="name" value="{{ problem.name }}" readonly>
+                <label for="name">Problem Title</label>
+              </div>
+              <div class="form-floating">
+                <textarea class="form-control locked-field" name="description" id="description" style="height: 120px" readonly>{{ problem.description }}</textarea>
+                <label for="description">Detailed Description</label>
+              </div>
+            </div>
+
+            <!-- Left Column -->
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label class="form-label">Code</label>
+                <input type="text" class="form-control bg-light" name="code" value="{{ problem.code }}" readonly>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Category</label>
+                <input type="text" class="form-control locked-field" name="category" value="{{ problem.category }}" readonly>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Priority</label>
+                <select class="form-select locked-field" name="priority" disabled>
+                  {% for p in ['P1', 'P2', 'P3', 'P4', 'P5'] %}
+                    <option value="{{ p }}" {% if problem.priority==p %}selected{% endif %}>{{ p }}</option>
+                  {% endfor %}
+                </select>
+                <small class="text-muted">P1 (critical) to P5 (lowest)</small>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Cost</label>
+                <div class="input-group">
+                  <span class="input-group-text">$</span>
+                  <input type="number" step="0.01" class="form-control locked-field" name="cost" value="{{ problem.cost }}" readonly>
+                </div>
+                <small class="text-muted">Additional cost incurred by this problem</small>
+              </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label class="form-label">Assigned to</label>
+                <select class="form-select locked-field" name="assigned_to" disabled>
+                  {% for user in users %}
+                    <option value="{{ user.id }}" {% if problem.assigned_to and problem.assigned_to.id==user.id %}selected{% endif %}>{{ user.username }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Open Date</label>
+                <input type="text" class="form-control bg-light" name="opened_at" value="{{ problem.opened_at.strftime('%Y-%m-%d %H:%M') }}" readonly>
+              </div>
+              {% if problem.resolved_at %}
+              <div class="mb-3">
+                <label class="form-label">Resolution Date</label>
+                <input type="text" class="form-control bg-light" name="resolved_at" value="{{ problem.resolved_at.strftime('%Y-%m-%d %H:%M') }}" readonly>
+              </div>
+              {% endif %}
+              <div class="mb-3">
+                <label class="form-label">Status</label>
+                <select class="form-select" name="status">
+                  {% for s in ['Open','In progress','Resolved','Closed'] %}
+                    <option value="{{ s }}" {% if problem.status==s %}selected{% endif %}>{{ s }}</option>
+                  {% endfor %}
+                </select>
+                <small class="text-muted">Changing to Resolved or Closed will set resolution date</small>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <!-- Problem Context Card -->
+    <div class="card mb-3">
+      <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-sitemap me-2"></i>Problem Context</h5>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <i class="fas fa-folder me-2 text-primary"></i>
+              <strong>Project:</strong> {{ problem.project.name }}
+            </div>
+            <a href="{{ url_for('project_dashboard', project_id=problem.project_id) }}" class="btn btn-sm btn-outline-primary">
+              <i class="fas fa-eye"></i>
+            </a>
+          </li>
+          {% if problem.milestone %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <i class="fas fa-flag me-2 text-info"></i>
+              <strong>Milestone:</strong> {{ problem.milestone.name }}
+            </div>
+            <a href="{{ url_for('milestone_dashboard', project_id=problem.project_id, milestone_id=problem.milestone_id) }}" class="btn btn-sm btn-outline-primary">
+              <i class="fas fa-eye"></i>
+            </a>
+          </li>
+          {% endif %}
+          {% if problem.checkpoint %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <i class="fas fa-check-circle me-2 text-success"></i>
+              <strong>Checkpoint:</strong> {{ problem.checkpoint.name }}
+            </div>
+            <a href="{{ url_for('checkpoint_dashboard', project_id=problem.project_id, milestone_id=problem.milestone_id, checkpoint_id=problem.checkpoint_id) }}" class="btn btn-sm btn-outline-primary">
+              <i class="fas fa-eye"></i>
+            </a>
+          </li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+
+    <!-- Problem Statistics Card -->
+    <div class="card">
+      <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Problem Statistics</h5>
+      </div>
+      <div class="card-body">
+        <div class="d-flex flex-column">
+          <!-- Age -->
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <i class="fas fa-calendar-day me-2 text-muted"></i>
+              <strong>Age:</strong>
+            </div>
+            <span>{{ age_days }} days</span>
+          </div>
+
+          <!-- Comments Count -->
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <i class="fas fa-comments me-2 text-muted"></i>
+              <strong>Comments:</strong>
+            </div>
+            <span>{{ problem.comments|length }}</span>
+          </div>
+
+          {% if problem.resolved_at %}
+          <!-- Time to Resolve -->
+          {% set resolve_days = ((problem.resolved_at - problem.opened_at).days)|int %}
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <i class="fas fa-clock me-2 text-muted"></i>
+              <strong>Time to Resolve:</strong>
+            </div>
+            <span>{{ resolve_days }} days</span>
+          </div>
+          {% endif %}
+
+          <!-- Last Update -->
+          {% if problem.comments %}
+          {% set last_comment = problem.comments|sort(attribute='created_at')|last %}
+          {% set days_since_update = ((now - last_comment.created_at).days)|int %}
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <i class="fas fa-history me-2 text-muted"></i>
+              <strong>Last Update:</strong>
+            </div>
+            <span>
+            {% if days_since_update == 0 %}
+              Today
+            {% elif days_since_update == 1 %}
+              Yesterday
+            {% else %}
+              {{ days_since_update }} days ago
+            {% endif %}
+            </span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Comments Section -->
+<div class="card">
+  <div class="card-header bg-light">
+    <h5 class="mb-0"><i class="fas fa-comments me-2"></i>Notes and Comments</h5>
+  </div>
+  <div class="card-body">
+    <div class="timeline">
+      {% for comment in problem.comments|reverse %}
+        <div class="card mb-3 border-start-0 rounded-3" style="border-left: 4px solid {% if comment.is_system %}#6c757d{% else %}#3c5aa8{% endif %} !important;">
+          <div class="card-body py-2">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <div>
+                {% if comment.is_system %}
+                  <span class="fas fa-robot me-2 text-secondary"></span>
+                  <strong>System</strong>
+                {% elif comment.user %}
+                  <span class="fas fa-user-circle me-2 text-primary"></span>
+                  <strong>{{ comment.user.username }}</strong>
+                {% else %}
+                  <span class="fas fa-user-circle me-2 text-muted"></span>
+                  <strong>Unknown user</strong>
+                {% endif %}
+              </div>
+              <span class="text-muted small">{{ comment.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            </div>
+            <p class="card-text mb-0">{{ comment.comment_text }}</p>
+          </div>
+        </div>
+      {% else %}
+        <div class="text-center py-4">
+          <i class="fas fa-comments fa-3x mb-3 text-muted"></i>
+          <p class="text-muted">No comments for this problem</p>
+        </div>
+      {% endfor %}
+    </div>
+
+    <form method="POST" action="{{ url_for('add_problem_comment', problem_id=problem.id) }}" class="mt-4">
+      <div class="mb-3">
+        <label class="form-label">Add Comment</label>
+        <textarea class="form-control" name="comment_text" rows="3" placeholder="Write your comment here..."></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary">
+        <i class="fas fa-plus-circle me-2"></i>Add Comment
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+function enableEditMode() {
+    var fields = document.querySelectorAll('.locked-field');
+    fields.forEach(function(field) {
+        field.readOnly = false;
+        field.classList.remove('locked-field');
+        field.classList.remove('bg-light');
+    });
+    var selects = document.querySelectorAll('select.locked-field');
+    selects.forEach(function(select) {
+        select.disabled = false;
+        select.classList.remove('locked-field');
+    });
+    document.getElementById('editButton').style.display = 'none';
+    document.getElementById('updateButton').style.display = 'inline-block';
+
+    // Enable cost field update with API
+    const costField = document.querySelector('input[name="cost"]');
+    costField.addEventListener('change', function() {
+        updateProblemCost({{ problem.id }}, this.value);
+    });
+
+    // Add visual feedback for edit mode
+    document.querySelectorAll('.form-control:not([readonly]), .form-select:not([disabled])').forEach(field => {
+        field.classList.add('border-primary');
+    });
+}
+
+function updateProblemCost(problemId, newCost) {
+    fetch('/api/update_problem_cost', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            problem_id: problemId,
+            cost: newCost
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if(data.success) {
+            console.log('Cost updated successfully to $' + data.new_cost);
+            // Show success notification
+            const notification = document.createElement('div');
+            notification.className = 'alert alert-success alert-dismissible fade show position-fixed bottom-0 end-0 m-3';
+            notification.innerHTML = `
+                <i class="fas fa-check-circle me-2"></i>Cost updated to $${data.new_cost}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(notification);
+
+            // Auto dismiss after 3 seconds
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => notification.remove(), 150);
+            }, 3000);
+        }
+    })
+    .catch(error => {
+        console.error('Error updating cost:', error);
+        // Show error notification
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-danger alert-dismissible fade show position-fixed bottom-0 end-0 m-3';
+        notification.innerHTML = `
+            <i class="fas fa-exclamation-circle me-2"></i>Error updating cost
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(notification);
+
+        // Auto dismiss after 3 seconds
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => notification.remove(), 150);
+        }, 3000);
+    });
+}
+
+// Status change handling
+document.querySelector('select[name="status"]').addEventListener('change', function() {
+    const currentStatus = '{{ problem.status }}';
+    const newStatus = this.value;
+
+    if ((currentStatus === 'Open' || currentStatus === 'In progress') &&
+        (newStatus === 'Resolved' || newStatus === 'Closed')) {
+        // Inform user about resolution date being set
+        const confirmResolve = confirm(`Changing status to ${newStatus} will set the resolution date to now. Continue?`);
+        if (!confirmResolve) {
+            this.value = currentStatus;
+        }
+    } else if ((currentStatus === 'Resolved' || currentStatus === 'Closed') &&
+              (newStatus === 'Open' || newStatus === 'In progress')) {
+        // Inform user about resolution date being cleared
+        const confirmReopen = confirm(`Changing status to ${newStatus} will clear the resolution date. Continue?`);
+        if (!confirmReopen) {
+            this.value = currentStatus;
+        }
+    }
+});
+
+// Age indicator formatting
+document.addEventListener('DOMContentLoaded', function() {
+    const ageIndicator = document.getElementById('problemAge');
+    const age = {{ age_days }};
+
+    if (age > 14) {
+        ageIndicator.classList.remove('bg-light', 'text-dark');
+        ageIndicator.classList.add('bg-danger', 'text-white');
+    } else if (age > 7) {
+        ageIndicator.classList.remove('bg-light', 'text-dark');
+        ageIndicator.classList.add('bg-warning');
+    }
+});
+</script>
+
+<style>
+.locked-field {
+    background-color: #f8f9fa;
+}
+
+.timeline .card {
+    transition: transform 0.2s;
+}
+
+.timeline .card:hover {
+    transform: translateX(5px);
+}
+
+.form-floating > .form-control {
+    height: calc(3.5rem + 2px);
+    padding: 1rem 0.75rem;
+}
+
+.form-floating > textarea.form-control {
+    height: auto;
+}
+
+.form-floating > .form-control:focus {
+    border-color: #3c5aa8;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(60, 90, 168, 0.25);
+}
+
+.form-floating > label {
+    padding: 1rem 0.75rem;
+}
+
+.alert-dismissible {
+    z-index: 1050;
+}
+</style>
+
+{% endblock %}

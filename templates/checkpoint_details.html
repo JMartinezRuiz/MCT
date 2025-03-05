@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Checkpoint Full Details{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <h2>{{ checkpoint.code }} - {{ checkpoint.name }}</h2>
+  <p>{{ checkpoint.description }}</p>
+</div>
+<div>
+  <h4>Summary</h4>
+  <p>Total Tasks: {{ total_tasks }}</p>
+  <p>Completed: {{ completed_tasks }}</p>
+  <p>Open: {{ open_tasks }}</p>
+  <p>Work Time: {{ total_work_time }}</p>
+</div>
+<div>
+  <h4>Task List</h4>
+  <ul>
+    {% for task in checkpoint.tasks %}
+      <li>
+        <a href="{{ url_for('task_detail', project_id=project_id, milestone_id=milestone_id, checkpoint_id=checkpoint.id, task_id=task.id) }}">
+          {{ task.code }} - {{ task.name }} ({{ task.status }})
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
